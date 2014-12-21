@@ -1,0 +1,197 @@
+---
+title: "Practical_ML_project"
+author: "vassbar"
+date: "Sunday, December 21, 2014"
+output: html_document
+---
+
+
+
+
+### Short Description of the Project ########
+
+  The goal of the project is to build a machine learning algorithm
+  that will produce predictions on the quality of barbell lifts exercises.
+  The data come from the monitor devices of six participants who performed the 
+  exercise in six different ways, one correct and five incorrect.Using the data 
+  from the monitoring devices, we are asked to build a machine learning algorithm
+  that predicts the way the exercise is performed, i.e. to classify the performance 
+  among the six categories. The algorithm is tested with 20 out-of-sample cases.
+
+
+
+### Data ###############
+
+ The data comes from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+ and it contains various measurements of the monitoring devices (i.e. arm acceleration),
+ name of the participants, the performance (e.g.if the exercise was conducted in the right way), as well as various other data.
+ 
+### Data Inspection and cleaning######
+
+ Before any analysis, a casual inspection of the dataset is undertaken. Scrolling 
+ through the dataset reveals that many variables have missing values or NA. These
+ variables are removed. Moreover, the timestamp variables, timestamp and user name
+ variables are removed:
+ 
+``` 
+bdata=pml.training
+dim(bdata)
+bdata2<-bdata[ , colSums(is.na(bdata)) == 0]
+bdata3<-bdata2[!sapply(bdata2, function(x) any(x == ""))]
+bdata4<-subset(bdata3,select=-c(X,user_name,cvtd_timestamp, raw_timestamp_part_1,raw_timestamp_part_2, new_window,num_window))
+``` 
+
+ Finally, the classe variable is turned into a factor, since we want the outcomes
+ to belong to one of the six categories:
+ 
+``` 
+bdata4$classe <- factor(bdata$classe)
+```
+### Model fitting #####
+ 
+ The caret package is used to perform the analysis. The method chosen for the
+ analysis is the random forests method. THe method is chosen as it is one of best algorithms in 
+ Machine Learning. The sample is divided into 80% for training  and the rest for in-sample testing.
+ All variables are used to build the model.
+ 
+ 
+``` 
+ library(caret)
+inTrain<-createDataPartition(y=bdata4$classe, p = 0.8,list=FALSE)
+training<-bdata4[inTrain,]
+testing<-bdata4[-inTrain,]
+
+ptm <- proc.time()
+modFit<-train(classe~.,data=training, method="rf")
+proc.time() - ptm
+modFit
+```
+
+ The random forests method takes considerable amount of time to run.
+ 
+ 
+
+### In-sample testing results ######
+
+ After the analysis is complete, we use the in-sample test dataset to check the predictions:
+ 
+``` 
+pred<-predict(modFit,testing);
+testing$predRight<-pred==testing$classe
+table(pred,testing$class)
+confusionMatrix(pred,testing$classe)
+```
+
+ The results of the confusion matrix and overall accuracy are below:
+ 
+``` 
+ Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1116    6    0    0    0
+         B    0  752    6    0    0
+         C    0    1  674    2    1
+         D    0    0    4  641    1
+         E    0    0    0    0  719
+
+Overall Statistics
+                                          
+               Accuracy : 0.9946          
+                 95% CI : (0.9918, 0.9967)
+    No Information Rate : 0.2845          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.9932          
+ Mcnemar's Test P-Value : NA            
+``` 
+ 
+ The 99.46% accuracy is high enough to use the results of the analysis 
+ to predict the out of sample cases.
+ 
+ 
+### Out of sample cases ####
+
+ We run the following code to run the out of sample test
+ and create the files for submission:
+
+```
+outsample<-pml.testing
+predout<-predict(modFit,outsample)
+predict(modFit,outsample)
+
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predout)
+```
+
+ In all cases the predictions were in agreement with the actual results.
+
+
+
+### Some further analysis ####
+
+ The above analysis has very high accuracy and predicted successfully the test cases. However, 
+ it takes long to run. In order to address the problem, further analysis is performed using only
+ a subset of the variables used above. The variables chosen are the acceleration variables:
+ 
+```
+xc1=subset(bdata3,select=c(accel_belt_x,accel_belt_y,accel_belt_z, magnet_belt_x,                                
+                          magnet_belt_y,magnet_belt_z, accel_forearm_x,
+                          accel_forearm_y,accel_forearm_z, magnet_forearm_x,
+                          magnet_forearm_y,magnet_forearm_z,accel_dumbbell_x,
+                          accel_dumbbell_y,accel_dumbbell_z,magnet_dumbbell_x,
+                          magnet_dumbbell_y,magnet_dumbbell_z, accel_arm_x,
+                          accel_arm_y,accel_arm_z,classe))
+```
+ 
+ Then, the random forest algorithm is employed again:
+ 
+```
+inTrain2<-createDataPartition(y=xc1$classe, p = 0.8,list=FALSE)
+training2<-xc1[inTrain,]
+testing2<-xc1[-inTrain,]
+mf<-train(classe~.,data=training2, method="rf")
+```
+
+ The accuracy now is at ~97%, but the running time is approximately only 25% of the above 
+ analysis. The results are the following:
+ 
+```
+pred2<-predict(mf,testing2);
+testing2$predRight<-pred2==testing2$classe
+table(pred2,testing2$class)
+confusionMatrix(pred2,testing2$classe)
+```
+
+```
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1112   17    3    7    0
+         B    2  727   17    1    2
+         C    0   12  664   26    0
+         D    2    1    0  609    4
+         E    0    2    0    0  715
+
+Overall Statistics
+                                          
+               Accuracy : 0.9755          
+                 95% CI : (0.9702, 0.9801)
+    No Information Rate : 0.2845          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.969           
+ Mcnemar's Test P-Value : NA              
+```
+
+     Moreover, the 20 out-of-sampe cases were also correctly predicted.
+
+
